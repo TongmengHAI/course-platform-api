@@ -7,7 +7,6 @@ const userRoutes = require("./src/modules/users/user.routes");
 
 app.use(express.json());
 
-
 app.use("/courses", courseRoutes);
 app.use("/users", userRoutes);
 

@@ -5,7 +5,7 @@ const {
     listing,
     creating,
     getById
-} = require('./user.controller')
+} = require('./user.controller') 
 
 
 // GET http://localhost:5000/users
