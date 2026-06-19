@@ -1,4 +1,6 @@
 const courses = require("./courses.data");
+
+
 // @desc Get all courses
 // @route GET /
 const getAllCourses = (req, res) => {
