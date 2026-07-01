@@ -4,7 +4,8 @@ const router = express.Router();
 const {
     listing,
     creating,
-    getById
+    getById,
+    updated
 } = require('./user.controller') 
 
 
@@ -15,5 +16,7 @@ router.get("",listing);
 router.post("",creating);
 
 router.get("/:id",getById);
+
+router.put("/:id",updated);
 
 module.exports = router;
