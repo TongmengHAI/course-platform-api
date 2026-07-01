@@ -1,21 +1,21 @@
-const { users } = require('../users/user.data')
+const { AppDataSource } = require("../../configs/database");
+const { User } = require("../users/user.entity");
 
-// business logic layer for auth (temporary in-memory data via user.data)
+// business logic layer for auth (now backed by MySQL via TypeORM)
+const userRepository = () => AppDataSource.getRepository(User);
 
-const findUserByPhone = (phone) => {
-    return users.find((user) => user.phone === phone);
+const findUserByPhone = async (phone) => {
+    return userRepository().findOne({ where: { phone } });
 };
 
-const createUser = ({ username, phone, password }) => {
-    const newUser = {
-        id: users.length + 1,
+const createUser = async ({ username, phone, password }) => {
+    const newUser = userRepository().create({
         username,
         phone,
         password,
         role: "student"
-    };
-    users.push(newUser);
-    return newUser;
+    });
+    return userRepository().save(newUser);
 };
 
 const checkPassword = (user, password) => {

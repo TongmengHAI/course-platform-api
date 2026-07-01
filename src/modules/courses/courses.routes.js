@@ -11,7 +11,8 @@ const {
 router.get("", getAllCourses);  // http:://127.0.0.1:5000/courses/
 
 
-router.get("/:id/get", getCourseById);  // http:://127.0.0.1:5000/courses/1
+router.get("/:id", getCourseById);  // http:://127.0.0.1:5000/courses/1
+router.get("/:id/get", getCourseById);  // http:://127.0.0.1:5000/courses/1/get
 
 module.exports = router;
 

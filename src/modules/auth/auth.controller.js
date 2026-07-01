@@ -2,7 +2,7 @@ const { findUserByPhone, createUser, checkPassword } = require('./auth.service')
 
 // controller = request & response layer
 
-const register = (req, res) => {
+const register = async (req, res) => {
     const { username, phone, password } = req.body;
 
     // validate required fields
@@ -13,13 +13,13 @@ const register = (req, res) => {
     }
 
     // check duplicate
-    const existingUser = findUserByPhone(phone);
+    const existingUser = await findUserByPhone(phone);
     if (existingUser) {
         return res.status(400).json({ message: "Phone number already exists" });
     }
 
     // create user
-    const newUser = createUser({ username, phone, password });
+    const newUser = await createUser({ username, phone, password });
 
     // do not return password in response data
     return res.status(201).json({
@@ -33,7 +33,7 @@ const register = (req, res) => {
     });
 };
 
-const login = (req, res) => {
+const login = async (req, res) => {
     const { phone, password } = req.body;
 
     // phone and password are required
@@ -42,7 +42,7 @@ const login = (req, res) => {
     }
 
     // user must exist before password check
-    const user = findUserByPhone(phone);
+    const user = await findUserByPhone(phone);
     if (!user) {
         return res.status(404).json({ message: "User not found" });
     }

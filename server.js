@@ -1,6 +1,11 @@
+require("reflect-metadata");
+require("dotenv").config();
+
 const express = require('express');
 const app = express();
-const port = 5000;
+const port = process.env.PORT || 5000;
+
+const { AppDataSource } = require("./src/configs/database");
 
 const courseRoutes = require("./src/modules/courses/courses.routes");
 const userRoutes = require("./src/modules/users/user.routes");
@@ -20,9 +25,17 @@ app.use("/users", userRoutes);
 app.use("/auth", authRoutes);
 
 
-// entry point
-app.listen(port, () => {
-    console.log(`Example app listening on port ${port}`);
-});
+// connect to DB first, then start the server
+AppDataSource.initialize()
+    .then(() => {
+        console.log("✅ Database connected");
+        app.listen(port, () => {
+            console.log(`Example app listening on port ${port}`);
+        });
+    })
+    .catch((error) => {
+        console.error("❌ Database connection failed:", error.message);
+        process.exit(1);
+    });
 
 // multer, npm install multer
