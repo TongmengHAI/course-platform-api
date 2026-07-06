@@ -15,7 +15,7 @@ const AppDataSource = new DataSource({
     password: process.env.DB_PASSWORD || "",
     database: process.env.DB_DATABASE || "course_platform",
     
-    synchronize: false, // true auto-creates/updates tables from entities (dev only)
+    synchronize: true, // true auto-creates/updates tables from entities (dev only)
     // logging: false,
     entities: [User, Course],
 });

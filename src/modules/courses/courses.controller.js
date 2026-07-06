@@ -9,7 +9,10 @@ const courseRepository = () => AppDataSource.getRepository(Course);
 const getAllCourses = async (req, res) => {
     const data = await courseRepository()
         .createQueryBuilder("course")
+        .leftJoinAndSelect("course.instructor", "instructor")
         .getMany();
+
+        // select * from courses join users on courses.instructorId = users.id;
 
     res.json({ message: "Courses retrieved successfully", data });
 };
@@ -21,6 +24,7 @@ const getCourseById = async (req, res) => {
 
     const course = await courseRepository()
         .createQueryBuilder("course")
+        .leftJoinAndSelect("course.instructor", "instructor")
         .where("course.id = :id", { id: courseId })
         .getOne();
 
@@ -32,7 +36,7 @@ const getCourseById = async (req, res) => {
 // @desc Create a new course
 // @route POST /
 const createCourse = async (req, res) => {
-    const { title, description, category, level, price, instructor } = req.body;
+    const { title, description, category, level, price, instructorId } = req.body;
 
     if (!title) {
         return res.status(400).json({ message: "title is required" });
@@ -45,7 +49,7 @@ const createCourse = async (req, res) => {
         category,
         level,
         price,
-        instructor,
+        instructor: instructorId ? { id: instructorId } : null,
     });
     const data = await repo.save(course);
 
@@ -56,7 +60,7 @@ const createCourse = async (req, res) => {
 // @route PUT /:id
 const updateCourse = async (req, res) => {
     const courseId = Number(req.params.id);
-    const { title, description, category, level, price, instructor } = req.body;
+    const { title, description, category, level, price, instructorId } = req.body;
 
     const repo = courseRepository();
     const course = await repo.findOneBy({ id: courseId });
@@ -69,7 +73,7 @@ const updateCourse = async (req, res) => {
     if (category !== undefined) course.category = category;
     if (level !== undefined) course.level = level;
     if (price !== undefined) course.price = price;
-    if (instructor !== undefined) course.instructor = instructor;
+    if (instructorId !== undefined) course.instructor = instructorId ? { id: instructorId } : null;
 
     const data = await repo.save(course);
 
@@ -86,7 +90,25 @@ const deleteCourse = async (req, res) => {
 
     if (!course) return res.status(404).json({ message: "Course not found" });
 
+    // hard delete the course (no soft delete implemented)
     await repo.remove(course);
+
+    res.json({ message: "Course deleted successfully", data: null });
+};
+
+// @desc Soft delete a course
+const softDeleteCourse = async (req, res) => {
+    const courseId = Number(req.params.id);
+
+    const repo = courseRepository();
+    const course = await repo.findOneBy({ id: courseId });
+
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    course.is_deleted = true;
+
+    // hard delete the course (no soft delete implemented)
+    await repo.save(course);
 
     res.json({ message: "Course deleted successfully", data: null });
 };
@@ -97,4 +119,5 @@ module.exports = {
     createCourse,
     updateCourse,
     deleteCourse,
+    softDeleteCourse
 };

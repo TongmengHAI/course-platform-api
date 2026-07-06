@@ -29,9 +29,20 @@ const Course = new EntitySchema({
             type: "int",
             default: 0
         },
+        is_deleted: {
+            type: "boolean",
+            default: false
+        }
+    },
+    relations: {
+        // Each course belongs to one instructor (a User).
         instructor: {
-            type: "varchar",
-            nullable: true
+            type: "many-to-one",
+            target: "User",
+            joinColumn: { name: "instructorId" },
+            nullable: true,
+            onDelete: "SET NULL",
+            // onUpdate: "CASCADE"
         }
     }
 });

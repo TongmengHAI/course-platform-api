@@ -29,6 +29,15 @@ const User = new EntitySchema({
             type: "varchar",
             default: "student"
         }
+    },
+    relations: {
+        // One instructor (User) can own many courses.
+        courses: {
+            type: "one-to-many",
+            target: "Course",
+            inverseSide: "instructor"
+        }
+        
     }
 });
 
