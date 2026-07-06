@@ -1,26 +1,25 @@
 const { Course } = require("./course.entity");
 const { AppDataSource } = require("../../configs/database");
 
+// Repository for the Course entity (reused by every handler).
+const courseRepository = () => AppDataSource.getRepository(Course);
+
 // @desc Get all courses
 // @route GET /
 const getAllCourses = async (req, res) => {
-    const data = await AppDataSource
-        .getRepository(Course)
+    const data = await courseRepository()
         .createQueryBuilder("course")
         .getMany();
 
     res.json({ message: "Courses retrieved successfully", data });
 };
 
-
-
 // @desc Get single course by ID
 // @route GET /:id
 const getCourseById = async (req, res) => {
     const courseId = Number(req.params.id);
 
-    const course = await AppDataSource
-        .getRepository(Course)
+    const course = await courseRepository()
         .createQueryBuilder("course")
         .where("course.id = :id", { id: courseId })
         .getOne();
@@ -29,4 +28,73 @@ const getCourseById = async (req, res) => {
 
     res.json({ message: "Course retrieved successfully", data: course });
 };
-module.exports = { getAllCourses, getCourseById };
+
+// @desc Create a new course
+// @route POST /
+const createCourse = async (req, res) => {
+    const { title, description, category, level, price, instructor } = req.body;
+
+    if (!title) {
+        return res.status(400).json({ message: "title is required" });
+    }
+
+    const repo = courseRepository();
+    const course = repo.create({
+        title,
+        description,
+        category,
+        level,
+        price,
+        instructor,
+    });
+    const data = await repo.save(course);
+
+    res.status(201).json({ message: "Course created successfully", data });
+};
+
+// @desc Update an existing course
+// @route PUT /:id
+const updateCourse = async (req, res) => {
+    const courseId = Number(req.params.id);
+    const { title, description, category, level, price, instructor } = req.body;
+
+    const repo = courseRepository();
+    const course = await repo.findOneBy({ id: courseId });
+
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    // Only overwrite fields that were actually provided.
+    if (title !== undefined) course.title = title;
+    if (description !== undefined) course.description = description;
+    if (category !== undefined) course.category = category;
+    if (level !== undefined) course.level = level;
+    if (price !== undefined) course.price = price;
+    if (instructor !== undefined) course.instructor = instructor;
+
+    const data = await repo.save(course);
+
+    res.json({ message: "Course updated successfully", data });
+};
+
+// @desc Delete a course
+// @route DELETE /:id
+const deleteCourse = async (req, res) => {
+    const courseId = Number(req.params.id);
+
+    const repo = courseRepository();
+    const course = await repo.findOneBy({ id: courseId });
+
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    await repo.remove(course);
+
+    res.json({ message: "Course deleted successfully", data: null });
+};
+
+module.exports = {
+    getAllCourses,
+    getCourseById,
+    createCourse,
+    updateCourse,
+    deleteCourse,
+};
