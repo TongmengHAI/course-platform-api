@@ -1,5 +1,6 @@
 const { Course } = require("./course.entity");
 const { AppDataSource } = require("../../configs/database");
+const { getPaginationParams, paginateQuery } = require("../../utils/pagination");
 
 // Repository for the Course entity (reused by every handler).
 const courseRepository = () => AppDataSource.getRepository(Course);
@@ -7,14 +8,52 @@ const courseRepository = () => AppDataSource.getRepository(Course);
 // @desc Get all courses
 // @route GET /
 const getAllCourses = async (req, res) => {
-    const data = await courseRepository()
+    // ---- Read & normalize query params ----
+    // Pagination (shared helper — see utils/pagination.js)
+    const { page, limit, skip } = getPaginationParams(req.query);
+
+    // Search (free text across title + description)
+    const search = (req.query.search || "").trim();
+
+    // Filters
+    const { category, level, instructorId, minPrice, maxPrice } = req.query;
+
+    // Sort: sortBy=field, order=ASC|DESC
+    const allowedSortFields = ["id", "title", "price", "category", "level"];
+    const sortBy = allowedSortFields.includes(req.query.sortBy)
+        ? req.query.sortBy
+        : "id";
+    const order = String(req.query.order).toUpperCase() === "ASC" ? "ASC" : "DESC";
+
+    // ---- Build the query ----
+    const qb = courseRepository()
         .createQueryBuilder("course")
         .leftJoinAndSelect("course.instructor", "instructor")
-        .getMany();
+        .where("course.is_deleted = :isDeleted", { isDeleted: false });
 
-        // select * from courses join users on courses.instructorId = users.id;
+    if (search) {
+        qb.andWhere(
+            "(course.title LIKE :search OR course.description LIKE :search)",
+            { search: `%${search}%` }
+        );
+    }
 
-    res.json({ message: "Courses retrieved successfully", data });
+    if (category) qb.andWhere("course.category = :category", { category });
+    if (level) qb.andWhere("course.level = :level", { level });
+    if (instructorId) qb.andWhere("course.instructorId = :instructorId", { instructorId: Number(instructorId) });
+    if (minPrice !== undefined) qb.andWhere("course.price >= :minPrice", { minPrice: Number(minPrice) });
+    if (maxPrice !== undefined) qb.andWhere("course.price <= :maxPrice", { maxPrice: Number(maxPrice) });
+
+    qb.orderBy(`course.${sortBy}`, order);
+
+    // Applies skip/take + getManyAndCount, returns { data, pagination }
+    const { data, pagination } = await paginateQuery(qb, { page, limit, skip });
+
+    res.json({
+        message: "Courses retrieved successfully",
+        data,
+        pagination,
+    });
 };
 
 // @desc Get single course by ID
