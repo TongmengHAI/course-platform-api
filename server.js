@@ -3,16 +3,25 @@ const app = express();
 const port = 5000;
 
 const courseRoutes = require("./src/modules/courses/courses.routes");
-app.use("/courses", courseRoutes);
+const authRoutes = require("./src/modules/auth/auth.routes");
+
+// express.json(): parse incoming JSON bodies so controllers can read req.body
+app.use(express.json());
+
+// logger middleware: log every request before the final logic runs
+const logger = (req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+};
+app.use(logger);
+
+// Routes
+app.use("/courses", courseRoutes);      // http://localhost:5000/courses/
+app.use("/api/auth", authRoutes);       // http://localhost:5000/api/auth/register | /login
 
 // url = http://localhost:5000 = http:://127.0.0.1:5000
 
 // url + course route: http://localhost:5000 = http:://127.0.0.1:5000/courses/
-
-
-app.get('/courses',(req, res) => {
-    res.json({ message: "Courses retrieved successfully", data: courses });
-})
 
 // // routes
 // app.get('/', (req, res) => {
