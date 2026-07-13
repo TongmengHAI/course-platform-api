@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const {
-    listing,
+    getAllUsers,
     creating,
     getById,
     updated
@@ -10,7 +10,7 @@ const {
 
 
 // GET http://localhost:5000/users
-router.get("",listing);
+router.get("",getAllUsers);
 
 // POST http://localhost:5000/users
 router.post("",creating);

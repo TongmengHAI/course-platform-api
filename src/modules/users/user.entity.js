@@ -28,6 +28,10 @@ const User = new EntitySchema({
         role: {
             type: "varchar",
             default: "student"
+        },
+        isDeleted: {
+            type: "boolean",
+            default: false
         }
     },
     relations: {
