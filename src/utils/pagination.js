@@ -13,7 +13,7 @@ const MAX_LIMIT = 100;
  * @returns {{ page: number, limit: number, skip: number }}
  */
 const getPaginationParams = (query = {}) => {
-    const page = Math.max(1, Number(query.page) || DEFAULT_PAGE);
+    const page  = Math.max(1, Number(query.page) || DEFAULT_PAGE);
     const limit = Math.min(
         MAX_LIMIT,
         Math.max(1, Number(query.limit) || DEFAULT_LIMIT)

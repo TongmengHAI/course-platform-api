@@ -13,9 +13,9 @@ const getAllCourses = async (req, res) => {
     const { page, limit, skip } = getPaginationParams(req.query);
 
     // Search (free text across title + description)
-    const search = (req.query.search || "").trim();
+    const search = (req.query.search || "").trim();// remove leading/trailing whitespace 
 
-    // Filters
+    // Filters 
     const { category, level, instructorId, minPrice, maxPrice } = req.query;
 
     // Sort: sortBy=field, order=ASC|DESC
@@ -23,7 +23,8 @@ const getAllCourses = async (req, res) => {
     const sortBy = allowedSortFields.includes(req.query.sortBy)
         ? req.query.sortBy
         : "id";
-    const order = String(req.query.order).toUpperCase() === "ASC" ? "ASC" : "DESC";
+    const order = String(req.query.order).toUpperCase() === "ASC" ? "ASC" : "DESC"; 
+    // asc = ascending order, desc = descending order
 
     // ---- Build the query ----
     const qb = courseRepository()
@@ -38,12 +39,14 @@ const getAllCourses = async (req, res) => {
         );
     }
 
+    // filters
     if (category) qb.andWhere("course.category = :category", { category });
     if (level) qb.andWhere("course.level = :level", { level });
     if (instructorId) qb.andWhere("course.instructorId = :instructorId", { instructorId: Number(instructorId) });
     if (minPrice !== undefined) qb.andWhere("course.price >= :minPrice", { minPrice: Number(minPrice) });
     if (maxPrice !== undefined) qb.andWhere("course.price <= :maxPrice", { maxPrice: Number(maxPrice) });
 
+    // sort
     qb.orderBy(`course.${sortBy}`, order);
 
     // Applies skip/take + getManyAndCount, returns { data, pagination }

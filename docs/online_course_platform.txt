@@ -95,3 +95,21 @@ Table lesson_progress {
     (user_id, lesson_id) [unique]
   }
 }
+
+/* =========================
+   RELATIONSHIPS
+   ========================= */
+
+Ref: users.role_id > roles.id
+
+Ref: courses.category_id > categories.id
+Ref: courses.instructor_id > users.id
+
+Ref: sections.course_id > courses.id
+Ref: lessons.section_id > sections.id
+
+Ref: enrollments.user_id > users.id
+Ref: enrollments.course_id > courses.id
+
+Ref: lesson_progress.user_id > users.id
+Ref: lesson_progress.lesson_id > lessons.id
