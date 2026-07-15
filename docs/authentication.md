@@ -27,14 +27,14 @@ from an empty folder to a secure, production-ready login.
 
 ---
 
-## 1. 🧠 What is Authentication?
+## 1. What is Authentication?
 
 **Authentication** answers one question: *"Who are you?"*
 **Authorization** answers a different one: *"What are you allowed to do?"*
 
 | Term | Question | Example |
 |------|----------|---------|
-| Authentication | Who are you? | Logging in with phone + password |
+| Authentication | Who are you? | Logging in with email + password |
 | Authorization | What can you do? | Only an `instructor` can create a course |
 
 In this guide we build **authentication** first (register + login), then add
@@ -48,13 +48,13 @@ Every request travels through the same layers. Keep this diagram in your head:
 
 ```
 Client (Postman / React)
-        │  POST /auth/register  { username, phone, password }
+        │  POST /auth/register  { name, email, password }
         ▼
 Express Server ──▶ Global Middleware (express.json, logger)
         │
         ▼
    Route  ──▶  Controller  ──▶  Service  ──▶  Database
- (auth.routes) (auth.controller) (auth.service)  (MySQL)
+ (auth.routes) (auth.controller) (user.service)  (MySQL)
         │
         ▼
    JSON Response  { message, data }
@@ -84,11 +84,11 @@ course-platform-api/
     │   └── auth.js               # verifies the JWT on protected routes
     └── modules/
         ├── users/
-        │   └── user.entity.js    # TypeORM model for the `users` table
+        │   ├── user.entity.js    # TypeORM model for the `users` table
+        │   └── user.service.js   # DB access + password logic
         └── auth/
             ├── auth.routes.js     # POST /register, POST /login
-            ├── auth.controller.js # validation + response
-            └── auth.service.js    # DB access + password logic
+            └── auth.controller.js # validation + response
 ```
 
 ---
@@ -140,19 +140,22 @@ npm start       # node server.js          → production run
 `src/modules/users/user.service.js`
 
 ```js
-// Service = business logic layer. Temporary in-memory data.
-// NOTE: when the server restarts, users disappear. Later we switch to MySQL.
+// Service = business logic layer. Temporary fake user data and reusable logic.
+//
+// NOTE: This is temporary in-memory data.
+// When the server restarts, users disappear.
+// Later, this service will use MySQL instead.
 const users = [];
 
-const findUserByPhone = (phone) => {
-    return users.find((user) => user.phone === phone);
+const findUserByEmail = (email) => {
+    return users.find((user) => user.email === email);
 };
 
-const createUser = ({ username, phone, password }) => {
+const createUser = ({ name, email, password }) => {
     const newUser = {
         id: users.length + 1,
-        username,
-        phone,
+        name,
+        email,
         password,
         role: "student",
     };
@@ -164,7 +167,7 @@ const checkPassword = (user, password) => {
     return user.password === password;
 };
 
-module.exports = { findUserByPhone, createUser, checkPassword };
+module.exports = { findUserByEmail, createUser, checkPassword };
 ```
 
 ### Step A2 — The register controller (validate → check duplicate → create)
@@ -174,37 +177,37 @@ module.exports = { findUserByPhone, createUser, checkPassword };
 ```js
 // Controller = request & response layer. Keep business logic in the service.
 const {
-    findUserByPhone,
+    findUserByEmail,
     createUser,
     checkPassword,
 } = require("../users/user.service");
 
 const register = (req, res) => {
-    const { username, phone, password } = req.body;
+    const { name, email, password } = req.body;
 
     // 1) Validate required fields
-    if (!username || !phone || !password) {
+    if (!name || !email || !password) {
         return res.status(400).json({
-            message: "Username, phone, and password are required",
+            message: "Name, email, and password are required",
         });
     }
 
     // 2) Reject duplicates
-    const existingUser = findUserByPhone(phone);
+    const existingUser = findUserByEmail(email);
     if (existingUser) {
-        return res.status(400).json({ message: "Phone number already exists" });
+        return res.status(400).json({ message: "Email already exists" });
     }
 
     // 3) Create the user
-    const newUser = createUser({ username, phone, password });
+    const newUser = createUser({ name, email, password });
 
     // 4) Return 201 + SAFE data (never send the password back)
     return res.status(201).json({
         message: "User registered successfully",
         data: {
             id: newUser.id,
-            username: newUser.username,
-            phone: newUser.phone,
+            name: newUser.name,
+            email: newUser.email,
             role: newUser.role,
         },
     });
@@ -219,15 +222,15 @@ Add to the same `auth.controller.js`:
 
 ```js
 const login = (req, res) => {
-    const { phone, password } = req.body;
+    const { email, password } = req.body;
 
     // 1) Required fields
-    if (!phone || !password) {
-        return res.status(400).json({ message: "Phone and password are required" });
+    if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
     }
 
     // 2) User must exist BEFORE checking the password
-    const user = findUserByPhone(phone);
+    const user = findUserByEmail(email);
     if (!user) {
         return res.status(404).json({ message: "User not found" });
     }
@@ -243,8 +246,8 @@ const login = (req, res) => {
         message: "Login successful",
         data: {
             id: user.id,
-            username: user.username,
-            phone: user.phone,
+            name: user.name,
+            email: user.email,
             role: user.role,
         },
     });
@@ -253,10 +256,10 @@ const login = (req, res) => {
 module.exports = { register, login };
 ```
 
-> 🔎 **Security detail:** we return the *same-ish* flow whether the user exists or the
-> password is wrong. In real apps some teams return a generic "Invalid credentials" for
-> both, so attackers can't tell which phone numbers are registered. We keep them separate
-> here for teaching clarity.
+> 🔎 **Security detail:** we return a different message for "user not found" vs "wrong
+> password". In real apps many teams return a generic `"Invalid credentials"` for both,
+> so attackers can't discover which emails are registered. We keep them separate here for
+> teaching clarity.
 
 ### Step A4 — The routes
 
@@ -268,6 +271,7 @@ const router = express.Router();
 
 const { register, login } = require("./auth.controller");
 
+// The route file only defines the last part of the URL.
 // The prefix "/auth" comes from server.js.
 router.post("/register", register); // POST http://localhost:5000/auth/register
 router.post("/login", login);       // POST http://localhost:5000/auth/login
@@ -325,8 +329,8 @@ const User = new EntitySchema({
     tableName: "users",
     columns: {
         id: { primary: true, type: "int", generated: true },
-        username: { type: "varchar", length: 50 },
-        phone: { type: "varchar", unique: true, length: 50 },
+        name: { type: "varchar", length: 50 },
+        email: { type: "varchar", unique: true, length: 100 },
         password: { type: "varchar" },
         role: { type: "varchar", default: "student" },
     },
@@ -337,7 +341,7 @@ module.exports = { User };
 
 Key ideas:
 - `generated: true` → auto-increment id.
-- `unique: true` on `phone` → the database itself blocks duplicates.
+- `unique: true` on `email` → the database itself blocks duplicates.
 - `default: "student"` → new users are students unless told otherwise.
 
 ### Step B2 — Configure the database connection
@@ -355,7 +359,7 @@ const AppDataSource = new DataSource({
     type: "mysql",
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT) || 3306,
-    username: process.env.DB_USERNAME || "root",
+    username: process.env.DB_USERNAME || "root",   // ← MySQL login, not the app user
     password: process.env.DB_PASSWORD || "",
     database: process.env.DB_DATABASE || "course_platform",
     synchronize: true, // auto-creates/updates tables from entities (DEV ONLY)
@@ -370,23 +374,23 @@ module.exports = { AppDataSource };
 
 ### Step B3 — Rewrite the service to use the database
 
-`src/modules/auth/auth.service.js`
+`src/modules/users/user.service.js`
 
 ```js
 const { AppDataSource } = require("../../configs/database");
-const { User } = require("../users/user.entity");
+const { User } = require("./user.entity");
 
 // A repository is TypeORM's object for reading/writing one table.
 const userRepository = () => AppDataSource.getRepository(User);
 
-const findUserByPhone = async (phone) => {
-    return userRepository().findOne({ where: { phone } });
+const findUserByEmail = async (email) => {
+    return userRepository().findOne({ where: { email } });
 };
 
-const createUser = async ({ username, phone, password }) => {
+const createUser = async ({ name, email, password }) => {
     const newUser = userRepository().create({
-        username,
-        phone,
+        name,
+        email,
         password,
         role: "student",
     });
@@ -397,11 +401,11 @@ const checkPassword = (user, password) => {
     return user.password === password;
 };
 
-module.exports = { findUserByPhone, createUser, checkPassword };
+module.exports = { findUserByEmail, createUser, checkPassword };
 ```
 
 > Notice these functions are now `async` (they hit the DB). So the controller must
-> `await` them: `const existingUser = await findUserByPhone(phone);`. Update
+> `await` them: `const existingUser = await findUserByEmail(email);`. Update
 > `auth.controller.js` — make `register`/`login` `async` and `await` every service call.
 
 ### Step B4 — Start the DB before the server
@@ -470,13 +474,13 @@ Update the service:
 const bcrypt = require("bcrypt");
 const { SALT_ROUNDS } = require("../../configs/security");
 
-const createUser = async ({ username, phone, password }) => {
+const createUser = async ({ name, email, password }) => {
     // Hash BEFORE saving
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
     const newUser = userRepository().create({
-        username,
-        phone,
+        name,
+        email,
         password: hashedPassword,
         role: "student",
     });
@@ -497,7 +501,7 @@ const checkPassword = async (user, password) => {
 A **JWT** (JSON Web Token) is a signed string the client stores and sends back on every
 request. The server can verify it without a database lookup.
 
-Create a helper (in `auth.service.js` or a small `token` util):
+Create a helper (in `user.service.js` or a small `token` util):
 
 ```js
 const jwt = require("jsonwebtoken");
@@ -512,7 +516,7 @@ const generateToken = (user) => {
     );
 };
 
-module.exports = { findUserByPhone, createUser, checkPassword, generateToken };
+module.exports = { findUserByEmail, createUser, checkPassword, generateToken };
 ```
 
 Return it from the login controller on success:
@@ -526,8 +530,8 @@ return res.status(200).json({
         token, // ⬅️ the client stores this (localStorage / httpOnly cookie)
         user: {
             id: user.id,
-            username: user.username,
-            phone: user.phone,
+            name: user.name,
+            email: user.email,
             role: user.role,
         },
     },
@@ -617,8 +621,8 @@ Set method to **POST**, Body → **raw** → **JSON**.
 **Register** — `POST http://localhost:5000/auth/register`
 ```json
 {
-    "username": "Student A",
-    "phone": "0176567014",
+    "name": "Student A",
+    "email": "student.a@gmail.com",
     "password": "123456"
 }
 ```
@@ -626,7 +630,7 @@ Set method to **POST**, Body → **raw** → **JSON**.
 **Login** — `POST http://localhost:5000/auth/login`
 ```json
 {
-    "phone": "0176567014",
+    "email": "student.a@gmail.com",
     "password": "123456"
 }
 ```
@@ -646,7 +650,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6...
 |------|---------|----------------|
 | `200` | OK | Login success |
 | `201` | Created | Register success |
-| `400` | Bad Request | Missing fields / duplicate phone |
+| `400` | Bad Request | Missing fields / duplicate email |
 | `401` | Unauthorized | Wrong password / missing-invalid token |
 | `403` | Forbidden | Logged in but wrong role |
 | `404` | Not Found | User does not exist |
@@ -676,28 +680,175 @@ Every endpoint returns the same envelope so the frontend can rely on it:
 |---------|--------------|-----|
 | `req.body` is `undefined` | Missing `app.use(express.json())` | Add it **before** the routes |
 | `ER_ACCESS_DENIED` on start | Wrong DB user/password | Check `.env` values |
-| `ER_DUP_ENTRY ... phone` | Phone already registered | Expected — that's the unique constraint working |
+| `ER_DUP_ENTRY ... email` | Email already registered | Expected — that's the unique constraint working |
 | Password check always fails after adding bcrypt | Old plain-text rows in DB | Delete old users and re-register |
 | `jwt malformed` | Sent the token without `Bearer ` prefix | Header must be `Authorization: Bearer <token>` |
-| Login returns 404 for a real user | Comparing wrong field / typo in phone | Log the value; confirm the row exists |
+| Login returns 404 for a real user | Typo in the email / comparing wrong field | Log the value; confirm the row exists |
 
 ---
 
-## 12. ✍️ Practice Exercises
+## 12. Practice Exercises
 
 Work through these in order. Each builds on the last.
 
 1. **Warm-up:** Add validation that the password must be at least 6 characters
    (return `400` otherwise).
-2. **Duplicate username:** Currently only `phone` is unique. Decide whether `username`
-   should be unique too, and enforce it.
-3. **`GET /auth/me`:** Build a protected route that returns the logged-in user's profile
+2. **Email format:** Reject an obviously invalid email (e.g. missing `@`) with `400`
+   *before* touching the database.
+3. **Case sensitivity:** `Student.A@gmail.com` and `student.a@gmail.com` are the same
+   inbox. Normalize the email to lowercase on register **and** login so users can't
+   create duplicate accounts.
+4. **`GET /auth/me`:** Build a protected route that returns the logged-in user's profile
    using the `auth` middleware and `req.user.id`.
-4. **Role guard:** Protect the "create course" route so only `instructor`/`admin` can use it.
-5. **Refactor challenge:** Move `generateToken` into its own `src/utils/token.js` and
+5. **Role guard:** Protect the "create course" route so only `instructor`/`admin` can use it.
+6. **Refactor challenge:** Move `generateToken` into its own `src/utils/token.js` and
    import it where needed.
-6. **Stretch:** Add a `POST /auth/logout` concept — discuss *why* stateless JWT makes
+7. **Stretch:** Add a `POST /auth/logout` concept — discuss *why* stateless JWT makes
    real logout tricky, and what a refresh-token strategy would look like.
+   👉 Study the flows in [12.1](#121--token--refresh-token-flow) first, then implement
+   `POST /auth/refresh` and `POST /auth/logout`.
+
+---
+
+### 12.1 🔁 Token & Refresh Token Flow
+
+#### A) What we built: access token only
+
+One long-lived token (`7d`). Simple — but it has two problems.
+
+```
+ CLIENT                                API                          MySQL
+
+1) LOGIN  -- exchange password for a token
+    │                                   │                             │
+    │  POST /auth/login                 │                             │
+    │  { email, password }              │                             │
+    ├──────────────────────────────────▶│                             │
+    │                                   ├── findUserByEmail(email) ──▶│
+    │                                   │◀─── user + password hash ───┤
+    │                                   │  bcrypt.compare()      OK   │
+    │                                   │  generateToken()  -> 7 days │
+    │◀────── 200 { token, user } ───────┤                             │
+    │  store token                      │                             │
+
+2) USE THE TOKEN  -- on every request
+    │                                   │                             │
+    │  GET /auth/me                     │                             │
+    │  Authorization: Bearer token      │                             │
+    ├──────────────────────────────────▶│                             │
+    │                                   │  jwt.verify(token)     OK   │
+    │                                   │  req.user = { id, role }    │
+    │◀────────── 200 { user } ──────────┤                             │
+
+3) THE PROBLEM  -- nothing can stop this token
+    │                                   │                             │
+    │                                   │                             │
+──────────────  7 days pass  --  token finally expires  ───────────────
+    │                                   │                             │
+    │  GET /auth/me  (expired)          │                             │
+    ├──────────────────────────────────▶│                             │
+    │                                   │  jwt.verify(token)  EXPIRED │
+    │◀── 401 Invalid or expired token ──┤                             │
+    │  must log in again                │                             │
+    │                                   │                             │
+```
+
+**The two problems:**
+
+1. **Long life = big risk.** If the token is stolen, the attacker has 7 days of access.
+2. **No real logout.** The server doesn't store the token, so it can't "cancel" it.
+   Deleting it in the browser only hides it — the token still works until it expires.
+
+>  **Why is stateless logout tricky?** A JWT is *self-contained*: the server verifies the
+> signature with `JWT_SECRET` and asks no database. That's what makes it fast — and it's
+> exactly why the server has no list of tokens to delete.
+
+#### B) The fix: short access token + long refresh token
+
+Split the job in two: a **short** access token for everyday requests, and a **long**
+refresh token whose only purpose is to mint new access tokens — and which the server
+*can* revoke.
+
+```
+ CLIENT                                API                          MySQL
+
+1) LOGIN  -- now you get TWO tokens
+    │                                   │                             │
+    │  POST /auth/login                 │                             │
+    │  { email, password }              │                             │
+    ├──────────────────────────────────▶│                             │
+    │                                   │  bcrypt.compare()      OK   │
+    │                                   │  accessToken  -> 15 min     │
+    │                                   │  refreshToken -> 7 days     │
+    │                                   ├──── save refreshToken ─────▶│
+    │◀─ { accessToken, refreshToken } ──┤                             │
+
+2) NORMAL REQUESTS  -- use the SHORT access token
+    │                                   │                             │
+    │  GET /courses                     │                             │
+    │  Bearer accessToken               │                             │
+    ├──────────────────────────────────▶│                             │
+    │                                   │  jwt.verify()          OK   │
+    │◀────────── 200 { data } ──────────┤                             │
+
+3) ACCESS TOKEN EXPIRES  -- but do NOT ask for the password
+    │                                   │                             │
+    │                                   │                             │
+───────────────  15 min pass  --  accessToken expires  ────────────────
+    │                                   │                             │
+    │  GET /courses  (expired)          │                             │
+    ├──────────────────────────────────▶│                             │
+    │◀────────── 401 expired ───────────┤                             │
+
+4) SILENT REFRESH  -- the refreshToken earns a new accessToken
+    │                                   │                             │
+    │  POST /auth/refresh               │                             │
+    │  { refreshToken }                 │                             │
+    ├──────────────────────────────────▶│                             │
+    │                                   ├─── look up refreshToken ───▶│
+    │                                   │◀──── valid, not revoked ────┤
+    │                                   │  new accessToken -> 15 min  │
+    │◀────── 200 { accessToken } ───────┤                             │
+    │  retry GET /courses -> 200        │                             │
+    │  the user never noticed           │                             │
+
+5) LOGOUT  -- now it actually works
+    │                                   │                             │
+    │  POST /auth/logout                │                             │
+    │  { refreshToken }                 │                             │
+    ├──────────────────────────────────▶│                             │
+    │                                   ├─── DELETE refreshToken ────▶│
+    │◀───────── 200 Logged out ─────────┤                             │
+    │                                   │                             │
+───────────  attacker later tries the stolen refreshToken  ────────────
+    │                                   │                             │
+    ├─────── POST /auth/refresh ───────▶│                             │
+    │                                   ├─── look up refreshToken ───▶│
+    │                                   │◀─── REVOKED / not found ────┤
+    │◀─────── 401 cannot refresh ───────┤                             │
+    │  access is truly dead             │                             │
+    │                                   │                             │
+```
+
+#### C) Access vs Refresh token
+
+| | 🎫 Access token | 🔄 Refresh token |
+|---|---|---|
+| **Lifetime** | Short — 15 min | Long — 7 days |
+| **Sent on** | *Every* request | Only `POST /auth/refresh` |
+| **Purpose** | Prove who you are | Get a new access token |
+| **Stored in DB?** | ❌ No (stateless) | ✅ Yes (so it can be revoked) |
+| **If stolen** | Damage limited to 15 min | Attacker can mint tokens → **must revoke** |
+| **Enables logout?** | ❌ No | ✅ Yes — delete it server-side |
+
+#### D) The trade-off (discuss in class 💬)
+
+Notice we gave up some "statelessness": the refresh token **is** stored in the database.
+That's the price of being able to log out and revoke access. Security and simplicity pull
+in opposite directions — good engineering is choosing consciously, not accidentally.
+
+> **Rule of thumb:** the access token is short *so a leak expires fast*; the refresh token
+> is stored *so you can kill it on demand*.
 
 ---
 
@@ -705,7 +856,7 @@ Work through these in order. Each builds on the last.
 
 You have "completed" authentication when **all** of these are true:
 
-- [ ] Register validates required fields and rejects duplicates
+- [ ] Register validates required fields and rejects duplicate emails
 - [ ] Passwords are **hashed** with bcrypt — no plain text in the database
 - [ ] Login returns a **JWT token** on success
 - [ ] Passwords are **never** included in any response
