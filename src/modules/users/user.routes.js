@@ -2,21 +2,27 @@ const express = require("express");
 const router = express.Router();
 
 const {
-    listing,
-    creating,
-    getById,
-    updated
+    getAllUsers,
+    createUser,
+    getUserById,
+    getUserByEmail,
+    updateUser,
+    softDeleteUser
 } = require('./user.controller') 
 
 
 // GET http://localhost:5000/users
-router.get("",listing);
+router.get("",getAllUsers);
 
 // POST http://localhost:5000/users
-router.post("",creating);
+router.post("",createUser);
 
-router.get("/:id",getById);
+router.get("/getByEmail", getUserByEmail);
 
-router.put("/:id",updated);
+router.get("/:id",getUserById);
+
+router.put("/:id",updateUser);
+
+router.delete("/:id",softDeleteUser);
 
 module.exports = router;

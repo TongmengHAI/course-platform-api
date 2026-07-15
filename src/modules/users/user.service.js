@@ -1,7 +1,7 @@
 const {users} = require('./user.data')
 
 
-const createUser = (username, phone, password, role)=>{
+const creating = (username, phone, password, role)=>{
 
     users.push({
         id:users.length+1,
@@ -14,7 +14,7 @@ const createUser = (username, phone, password, role)=>{
     return true;
 }
 
-const updateUser = (id, username, phone, password, role)=>{
+const updating = (id, username, phone, password, role)=>{
 
     const index = users.findIndex((u) => u.id == id);
 
@@ -31,4 +31,4 @@ const updateUser = (id, username, phone, password, role)=>{
 
 
 
-module.exports = {createUser, updateUser};
+module.exports = {creating, updating};
