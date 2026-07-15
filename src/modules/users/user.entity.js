@@ -14,13 +14,14 @@ const User = new EntitySchema({
         username: {
             type: "varchar",
             length: 50,
-
+        },
+        email: {
+            type: "varchar",
+            length: 100,
         },
         phone: {
             type: "varchar",
-            unique: true,
             length: 50,
-
         },
         password: {
             type: "varchar"
@@ -29,7 +30,7 @@ const User = new EntitySchema({
             type: "varchar",
             default: "student"
         },
-        isDeleted: {
+        is_deleted: {
             type: "boolean",
             default: false
         }
