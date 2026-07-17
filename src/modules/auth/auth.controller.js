@@ -1,25 +1,34 @@
-const { findUserByPhone, createUser, checkPassword } = require('./auth.service')
+const { creating } = require('../users/user.service');
+const { findUserByPhone, findUserByEmail } = require('../users/user.service');
+const { checkPassword } = require('./auth.service')
 
 // controller = request & response layer
 
 const register = async (req, res) => {
-    const { username, phone, password } = req.body;
+    const { username, phone, password, email } = req.body;
 
     // validate required fields
-    if (!username || !phone || !password) {
+    if (!username || !phone || !password || !email) {
         return res.status(400).json({
-            message: "Username, phone, and password are required"
+            message: "All fields are required"
         });
     }
 
     // check duplicate
-    const existingUser = await findUserByPhone(phone);
-    if (existingUser) {
+    const existingPhone = await findUserByPhone(phone);
+    if (existingPhone) {
         return res.status(400).json({ message: "Phone number already exists" });
     }
 
+    const existingEmail = await findUserByEmail(email);
+    if (existingEmail) {
+        return res.status(400).json({ message: "Email already exists" });
+    }
+
+    const role = "student"; // default role for new users
     // create user
-    const newUser = await createUser({ username, phone, password });
+    // const newUser = await creating(u_name, phoneNumber, password, role, email);
+    const newUser = await creating({ username, phone, password, email, role });
 
     // do not return password in response data
     return res.status(201).json({
@@ -28,6 +37,7 @@ const register = async (req, res) => {
             id: newUser.id,
             username: newUser.username,
             phone: newUser.phone,
+            email: newUser.email,
             role: newUser.role
         }
     });

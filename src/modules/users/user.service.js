@@ -1,34 +1,35 @@
-const {users} = require('./user.data')
+const bcrypt = require("bcrypt");
+
+const { SALT_ROUNDS } = require("../../configs/security");
+const { AppDataSource } = require('../../configs/database');
+
+const { User } = require('./user.entity');
+
+const userRepo = () => AppDataSource.getRepository(User);
+
+const findUserByEmail = async (email) => {
+    return userRepo().findOne({ where: { email } });
+};
+
+const findUserByPhone = async (phone) => {
+    return userRepo().findOne({ where: { phone } });
+};
 
 
-const creating = (username, phone, password, role)=>{
+const creating = async ({ username, phone, password, role, email }) => {
+    const repo = userRepo();
+        // Hash BEFORE saving
+    const hashedPassword = await bcrypt.hash(String(password), SALT_ROUNDS);
 
-    users.push({
-        id:users.length+1,
-        username:username,
-        phone:phone,
-        password:password,
-        role:role
-    })
-    
-    return true;
-}
-
-const updating = (id, username, phone, password, role)=>{
-
-    const index = users.findIndex((u) => u.id == id);
-
-    if (index === -1) {
-        return null;
-    }
-
-    const updatedUser = {...users[index], username, phone, password, role};
-
-    users[index] = updatedUser;
-
-    return updatedUser;
-}
+    const user = repo.create({
+        username,
+        phone,
+        password: hashedPassword,
+        role,
+        email
+    });
+    return repo.save(user);
+};
 
 
-
-module.exports = {creating, updating};
+module.exports = { creating, findUserByEmail, findUserByPhone };

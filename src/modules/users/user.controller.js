@@ -1,8 +1,7 @@
 const { AppDataSource } = require('../../configs/database');
 const { getPaginationParams, paginateQuery } = require("../../utils/pagination");
-const { users } = require('./user.data');
 const { User } = require('./user.entity');
-const { creating, updating } = require('./user.service')
+const { creating } = require('./user.service')
 
 const userRepo = () => AppDataSource.getRepository(User);
 
@@ -73,15 +72,7 @@ const createUser = async (req, res) => {
         return res.status(400).json({ message: "Email or phone already exists" });
     }
 
-    const repo = userRepo();
-    const user = repo.create({
-        username,
-        phone,
-        password,
-        role,
-        email
-    });
-    const data = await repo.save(user);
+    const data = await creating({ username, phone, password, role, email });
 
     res.status(201).json({ message: "User created successfully", data });
 };

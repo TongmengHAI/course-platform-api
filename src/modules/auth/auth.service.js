@@ -1,25 +1,11 @@
-const { AppDataSource } = require("../../configs/database");
-const { User } = require("../users/user.entity");
 
-// business logic layer for auth (now backed by MySQL via TypeORM)
-const userRepository = () => AppDataSource.getRepository(User);
+const bcrypt = require("bcrypt");
+// const { SALT_ROUNDS } = require("../../configs/security");
 
-const findUserByPhone = async (phone) => {
-    return userRepository().findOne({ where: { phone } });
+
+const checkPassword = async (user, password) => {
+    // return user.password === bcrypt.hash(String(password), SALT_ROUNDS);
+    return bcrypt.compareSync(String(password), user.password);
 };
 
-const createUser = async ({ username, phone, password }) => {
-    const newUser = userRepository().create({
-        username,
-        phone,
-        password,
-        role: "student"
-    });
-    return userRepository().save(newUser);
-};
-
-const checkPassword = (user, password) => {
-    return user.password === password;
-};
-
-module.exports = { findUserByPhone, createUser, checkPassword };
+module.exports = { checkPassword };
