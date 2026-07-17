@@ -1,23 +1,34 @@
-const users = [];
+const {users} = require('./user.data')
 
-const findUserByEmail = (email) => {
-    return users.find((user) => user.email === email);
-};
 
-const createUser = ({ name, email, password }) => {
-    const newUser = {
-        id: users.length + 1,
-        name,
-        email,
-        password,
-        role: "student"
-    };
-    users.push(newUser);
-    return newUser;
-};
+const creating = (username, phone, password, role)=>{
 
-const checkPassword = (user, password) => {
-    return user.password === password;
-};
+    users.push({
+        id:users.length+1,
+        username:username,
+        phone:phone,
+        password:password,
+        role:role
+    })
+    
+    return true;
+}
 
-module.exports = { findUserByEmail, createUser, checkPassword };
+const updating = (id, username, phone, password, role)=>{
+
+    const index = users.findIndex((u) => u.id == id);
+
+    if (index === -1) {
+        return null;
+    }
+
+    const updatedUser = {...users[index], username, phone, password, role};
+
+    users[index] = updatedUser;
+
+    return updatedUser;
+}
+
+
+
+module.exports = {creating, updating};

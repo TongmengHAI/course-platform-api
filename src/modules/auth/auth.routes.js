@@ -1,14 +1,15 @@
 const express = require("express");
+const router = express.Router();
+
 const {
     register,
     login
-} = require("./auth.controller");
+} = require('./auth.controller');
 
-const router = express.Router();
-
-// The route file only defines the last part of the URL.
-// The prefix "/api/auth" comes from server.js.
-router.post("/register", register); // POST http://localhost:5000/api/auth/register
-router.post("/login", login);       // POST http://localhost:5000/api/auth/login
+// prefix "/auth" comes from server.js
+// POST http://localhost:5000/auth/register
+router.post("/register", register);
+// POST http://localhost:5000/auth/login
+router.post("/login", login);
 
 module.exports = router;

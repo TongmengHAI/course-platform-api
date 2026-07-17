@@ -1,46 +1,41 @@
+require("reflect-metadata");
+require("dotenv").config();
+
 const express = require('express');
 const app = express();
-const port = 5000;
+const port = process.env.PORT || 5000;
+
+const { AppDataSource } = require("./src/configs/database");
 
 const courseRoutes = require("./src/modules/courses/courses.routes");
+const userRoutes = require("./src/modules/users/user.routes");
 const authRoutes = require("./src/modules/auth/auth.routes");
 
-// express.json(): parse incoming JSON bodies so controllers can read req.body
 app.use(express.json());
 
-// logger middleware: log every request before the final logic runs
+// middleware: log every request before the final logic runs
 const logger = (req, res, next) => {
     console.log(`${req.method} ${req.url}`);
     next();
 };
 app.use(logger);
 
-// Routes
-app.use("/courses", courseRoutes);      // http://localhost:5000/courses/
-app.use("/api/auth", authRoutes);       // http://localhost:5000/api/auth/register | /login
-
-// url = http://localhost:5000 = http:://127.0.0.1:5000
-
-// url + course route: http://localhost:5000 = http:://127.0.0.1:5000/courses/
-
-// // routes
-// app.get('/', (req, res) => {
-//     res.send('Hello World!');
-// });
-
-// // req = request, res = response
-// app.get('/health', (req, res) => {
-//     console.log('Get data from form param: '+req.query.name); // form data pass by params
-//     res.send('good!');
-// });
-
-// app.get('/book/:id', (req, res) => {
-//     console.log('Get data from route param: '+req.params.id);  // 
-//     res.send('Book!')
-// });
+app.use("/courses", courseRoutes);
+app.use("/users", userRoutes);
+app.use("/auth", authRoutes);
 
 
-// entry point
-app.listen(port, () => {
-    console.log(`Example app listening on port ${port}`);
-});
+// connect to DB first, then start the server
+AppDataSource.initialize()
+    .then(() => {
+        console.log("✅ Database connected");
+        app.listen(port, () => {
+            console.log(`Example app listening on port ${port}`);
+        });
+    })
+    .catch((error) => {
+        console.error("❌ Database connection failed:", error.message);
+        process.exit(1);
+    });
+
+// multer, npm install multer

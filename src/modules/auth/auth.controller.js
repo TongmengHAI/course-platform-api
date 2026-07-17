@@ -1,68 +1,65 @@
-const {
-    findUserByEmail,
-    createUser,
-    checkPassword
-} = require("../users/user.service");
+const { findUserByPhone, createUser, checkPassword } = require('./auth.service')
 
-const register = (req, res) => {
-    const { name, email, password } = req.body;
+// controller = request & response layer
 
-    // Validate required fields
-    if (!name || !email || !password) {
+const register = async (req, res) => {
+    const { username, phone, password } = req.body;
+
+    // validate required fields
+    if (!username || !phone || !password) {
         return res.status(400).json({
-            message: "Name, email, and password are required"
+            message: "Username, phone, and password are required"
         });
     }
 
-    // Check duplicate email
-    const existingUser = findUserByEmail(email);
+    // check duplicate
+    const existingUser = await findUserByPhone(phone);
     if (existingUser) {
-        return res.status(400).json({ message: "Email already exists" });
+        return res.status(400).json({ message: "Phone number already exists" });
     }
 
-    // Create user
-    const newUser = createUser({ name, email, password });
+    // create user
+    const newUser = await createUser({ username, phone, password });
 
-    // Return status 201 and safe user data (no password)
-    res.status(201).json({
+    // do not return password in response data
+    return res.status(201).json({
         message: "User registered successfully",
         data: {
             id: newUser.id,
-            name: newUser.name,
-            email: newUser.email,
+            username: newUser.username,
+            phone: newUser.phone,
             role: newUser.role
         }
     });
 };
 
-const login = (req, res) => {
-    const { email, password } = req.body;
+const login = async (req, res) => {
+    const { phone, password } = req.body;
 
-    // Email and password are required
-    if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
+    // phone and password are required
+    if (!phone || !password) {
+        return res.status(400).json({ message: "Phone and password are required" });
     }
 
-    // User must exist before password check
-    const user = findUserByEmail(email);
+    // user must exist before password check
+    const user = await findUserByPhone(phone);
     if (!user) {
         return res.status(404).json({ message: "User not found" });
     }
 
-    // Wrong password returns 401
+    // wrong password returns 401
     const isPasswordCorrect = checkPassword(user, password);
     if (!isPasswordCorrect) {
         return res.status(401).json({ message: "Invalid password" });
     }
 
-    // Correct login returns safe user data (no password)
-    // Later, this success response will include a JWT token.
-    res.json({
+    // correct login returns safe user info (no password)
+    return res.status(200).json({
         message: "Login successful",
         data: {
             id: user.id,
-            name: user.name,
-            email: user.email,
+            username: user.username,
+            phone: user.phone,
             role: user.role
         }
     });
