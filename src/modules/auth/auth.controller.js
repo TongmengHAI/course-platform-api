@@ -1,4 +1,4 @@
-const { creating } = require('../users/user.service');
+const { creating, generateToken } = require('../users/user.service');
 const { findUserByPhone, findUserByEmail } = require('../users/user.service');
 const { checkPassword } = require('./auth.service')
 
@@ -63,7 +63,7 @@ const login = async (req, res) => {
         return res.status(401).json({ message: "Invalid password" });
     }
 
-    // correct login returns safe user info (no password)
+    // correct login returns safe user info (no password) and token
     return res.status(200).json({
         message: "Login successful",
         data: {
@@ -71,7 +71,8 @@ const login = async (req, res) => {
             username: user.username,
             phone: user.phone,
             role: user.role
-        }
+        },
+        token: generateToken(user)
     });
 };
 

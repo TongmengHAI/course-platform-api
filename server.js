@@ -1,6 +1,7 @@
 require("reflect-metadata");
 require("dotenv").config();
 
+const { auth } = require("./src/middlewares/auth");
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 5000;
@@ -20,8 +21,8 @@ const logger = (req, res, next) => {
 };
 app.use(logger);
 
-app.use("/courses", courseRoutes);
-app.use("/users", userRoutes);
+app.use("/courses", auth, courseRoutes);
+app.use("/users", auth, userRoutes);
 app.use("/auth", authRoutes);
 
 
