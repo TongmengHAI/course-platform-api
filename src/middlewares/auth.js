@@ -19,4 +19,13 @@ const auth = (req, res, next) => {
     }
 };
 
-module.exports = { auth };
+// Usage: authorize("instructor", "admin")
+const authorize = (...allowedRoles) => (req, res, next) => {
+    if (!allowedRoles.includes(req.user.role)) {
+        return res.status(403).json({ message: "You do not have permission" });
+    }
+    next();
+};
+
+
+module.exports = { auth, authorize };

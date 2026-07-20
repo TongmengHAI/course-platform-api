@@ -1,16 +1,15 @@
 require("reflect-metadata");
 require("dotenv").config();
 
-const { auth } = require("./src/middlewares/auth");
 const express = require('express');
-const app = express();
-const port = process.env.PORT || 5000;
-
+const { auth, authorize } = require("./src/middlewares/auth");
 const { AppDataSource } = require("./src/configs/database");
-
 const courseRoutes = require("./src/modules/courses/courses.routes");
 const userRoutes = require("./src/modules/users/user.routes");
 const authRoutes = require("./src/modules/auth/auth.routes");
+
+const app = express();
+const port = process.env.PORT || 5000;
 
 app.use(express.json());
 
@@ -21,8 +20,8 @@ const logger = (req, res, next) => {
 };
 app.use(logger);
 
-app.use("/courses", auth, courseRoutes);
-app.use("/users", auth, userRoutes);
+app.use("/courses", auth, authorize("instructor", "admin"), courseRoutes);
+app.use("/users", auth, authorize("admin"), userRoutes);
 app.use("/auth", authRoutes);
 
 
