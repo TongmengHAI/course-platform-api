@@ -25,9 +25,11 @@ const register = async (req, res) => {
         return res.status(400).json({ message: "Email already exists" });
     }
 
-    const role = "student"; // default role for new users
+    // Allow student or instructor, default to student. Prevent unauthorized admin creation.
+    const requestedRole = req.body.role;
+    const role = requestedRole === "instructor" ? "instructor" : "student";
+    
     // create user
-    // const newUser = await creating(u_name, phoneNumber, password, role, email);
     const newUser = await creating({ username, phone, password, email, role });
 
     // do not return password in response data

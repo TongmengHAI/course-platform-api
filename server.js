@@ -2,6 +2,7 @@ require("reflect-metadata");
 require("dotenv").config();
 
 const express = require('express');
+const cors = require('cors');
 const { auth, authorize } = require("./src/middlewares/auth");
 const { AppDataSource } = require("./src/configs/database");
 const courseRoutes = require("./src/modules/courses/courses.routes");
@@ -11,6 +12,7 @@ const authRoutes = require("./src/modules/auth/auth.routes");
 const app = express();
 const port = process.env.PORT || 5000;
 
+app.use(cors());
 app.use(express.json());
 
 // middleware: log every request before the final logic runs
