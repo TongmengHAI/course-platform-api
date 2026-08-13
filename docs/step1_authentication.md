@@ -640,6 +640,26 @@ Set method to **POST**, Body → **raw** → **JSON**.
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6...
 ```
 
+### 🔑 Note: Creating an Admin User
+Because the register endpoint restricts standard user signups to `student` or `instructor` roles, you cannot create an `admin` account via the public registration API.
+
+To log in as an administrator in development, you must insert an admin record manually into your database. Run the following SQL statement in your database client (e.g. MySQL Command Line, Workbench, or phpMyAdmin) to seed a default admin user with the password `password123`:
+
+```sql
+INSERT INTO users (username, email, phone, password, role) 
+VALUES (
+    'Admin User', 
+    'admin@test.com', 
+    '011000111', 
+    '$2b$10$lVLd9UPkxCisXR.D0immY.f4rRMXGg.AwMJr.qdztPfXmgL06yI5C', 
+    'admin'
+);
+```
+
+You can then log in via Postman or the login form using:
+- **Phone**: `011000111`
+- **Password**: `password123`
+
 ---
 
 ## 10. 📋 Reference Tables
