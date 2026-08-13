@@ -850,6 +850,297 @@ in opposite directions — good engineering is choosing consciously, not acciden
 > **Rule of thumb:** the access token is short *so a leak expires fast*; the refresh token
 > is stored *so you can kill it on demand*.
 
+#### E) Step-by-Step Implementation Guide
+
+Follow these steps to fix existing security & routing issues, then implement the complete Refresh Token mechanism.
+
+---
+
+### Step 1 — Security Hotfix: Correct the `checkPassword` Promise Bypass
+
+#### 🚨 The Vulnerability
+Look at `src/modules/auth/auth.service.js`:
+```javascript
+const checkPassword = async (user, password) => {
+    return bcrypt.compareSync(String(password), user.password);
+};
+```
+And its usage in `src/modules/auth/auth.controller.js`:
+```javascript
+const isPasswordCorrect = checkPassword(user, password);
+if (!isPasswordCorrect) {
+    return res.status(401).json({ message: "Invalid password" });
+}
+```
+Because `checkPassword` is marked as `async`, it returns a Promise. A Promise in JavaScript is always an object, which evaluates to a truthy value in checks. Thus, `!isPasswordCorrect` is evaluated as `!true` which is `false`. The `if` check is bypassed, and users can log in with **any** password!
+
+#### 🛠️ The Fix
+Remove the `async` keyword in `src/modules/auth/auth.service.js` so it returns a boolean value synchronously:
+```javascript
+const checkPassword = (user, password) => {
+    return bcrypt.compareSync(String(password), user.password);
+};
+```
+
+---
+
+### Step 2 — Routing Hotfix: Allow Students to Browse Courses
+
+#### 🚨 The Routing Bug
+In `server.js`, the courses routing middleware blocks students:
+```javascript
+app.use("/courses", auth, authorize("instructor", "admin"), courseRoutes);
+```
+This requires any visitor of `/courses` to be an instructor or admin, preventing students from browsing or reading courses.
+
+#### 🛠️ The Fix
+1. In `server.js`, remove the role guard middleware `authorize(...)` from the global `/courses` route mount:
+```javascript
+app.use("/courses", auth, courseRoutes);
+```
+2. Open `src/modules/courses/courses.routes.js` and import the `authorize` helper:
+```javascript
+const { authorize } = require("../../middlewares/auth");
+```
+3. Wrap write-based endpoints individually using `authorize("instructor", "admin")` to protect them, leaving the `GET` endpoints open to students:
+```javascript
+router.get("", getAllCourses);          // GET    /courses (Open to all logged-in roles)
+router.post("", authorize("instructor", "admin"), createCourse);          // POST   /courses (Restricted)
+
+router.get("/:id", getCourseById);      // GET    /courses/:id (Open)
+router.put("/:id", authorize("instructor", "admin"), updateCourse);       // PUT    /courses/:id (Restricted)
+router.delete("/:id", authorize("instructor", "admin"), deleteCourse);    // DELETE /courses/:id (Restricted)
+router.patch("/:id", authorize("instructor", "admin"), softDeleteCourse); // PATCH  /courses/:id (Restricted)
+```
+
+---
+
+### Step 3 — Build the `RefreshToken` Table & Schema
+
+#### 🛠️ Action
+Create a new file `src/modules/auth/refresh-token.entity.js` containing the database entity configuration:
+```javascript
+const { EntitySchema } = require("typeorm");
+
+const RefreshToken = new EntitySchema({
+    name: "RefreshToken",
+    tableName: "refresh_tokens",
+    columns: {
+        id: {
+            primary: true,
+            type: "int",
+            generated: true
+        },
+        token: {
+            type: "varchar",
+            length: 255,
+            unique: true
+        },
+        expiresAt: {
+            type: "datetime"
+        },
+        createdAt: {
+            type: "timestamp",
+            default: () => "CURRENT_TIMESTAMP"
+        }
+    },
+    relations: {
+        user: {
+            type: "many-to-one",
+            target: "User",
+            joinColumn: { name: "userId" },
+            onDelete: "CASCADE"
+        }
+    }
+});
+
+module.exports = { RefreshToken };
+```
+
+---
+
+### Step 4 — Register the Entity in the DataSource
+
+#### 🛠️ Action
+Open `src/configs/database.js`, import the `RefreshToken` entity schema, and add it to the `entities` array:
+```javascript
+const { User } = require("../modules/users/user.entity");
+const { Course } = require("../modules/courses/course.entity");
+const { RefreshToken } = require("../modules/auth/refresh-token.entity");
+
+const AppDataSource = new DataSource({
+    // ...
+    entities: [User, Course, RefreshToken],
+});
+```
+
+---
+
+### Step 5 — Write Refresh Token Helper Services
+
+#### 🛠️ Action
+Open `src/modules/auth/auth.service.js`, import the new entity, and implement core token management services:
+```javascript
+const crypto = require("crypto");
+const { AppDataSource } = require("../../configs/database");
+const { RefreshToken } = require("./refresh-token.entity");
+
+const tokenRepo = () => AppDataSource.getRepository(RefreshToken);
+
+// 1. Generate & save token to DB
+const createRefreshToken = async (userId) => {
+    const token = crypto.randomBytes(20).toString("hex");
+    
+    // Set expiry to 7 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    
+    const repo = tokenRepo();
+    const refreshToken = repo.create({
+        token,
+        expiresAt,
+        user: { id: userId }
+    });
+    
+    await repo.save(refreshToken);
+    return token;
+};
+
+// 2. Validate token and return associated User
+const verifyRefreshToken = async (tokenString) => {
+    const repo = tokenRepo();
+    const token = await repo.findOne({
+        where: { token: tokenString },
+        relations: { user: true } // TypeORM v0.3 object relations syntax
+    });
+    
+    if (!token) return null;
+    
+    // Validate expiration date
+    if (new Date() > new Date(token.expiresAt)) {
+        await repo.remove(token);
+        return null;
+    }
+    
+    return token.user;
+};
+
+// 3. Revoke (delete) token from DB on logout
+const revokeRefreshToken = async (tokenString) => {
+    const repo = tokenRepo();
+    const token = await repo.findOneBy({ token: tokenString });
+    if (token) {
+        await repo.remove(token);
+    }
+};
+
+module.exports = {
+    checkPassword,
+    createRefreshToken,
+    verifyRefreshToken,
+    revokeRefreshToken
+};
+```
+
+---
+
+### Step 6 — Implement Handlers inside `auth.controller.js`
+
+#### 🛠️ Action
+Open `src/modules/auth/auth.controller.js`:
+1. Import the new services from `./auth.service`.
+2. Update `login` to generate both `accessToken` and `refreshToken` and send them back:
+```javascript
+const login = async (req, res) => {
+    const { phone, password } = req.body;
+
+    if (!phone || !password) {
+        return res.status(400).json({ message: "Phone and password are required" });
+    }
+
+    const user = await findUserByPhone(phone);
+    if (!user) {
+        return res.status(404).json({ message: "User not found" });
+    }
+
+    const isPasswordCorrect = checkPassword(user, password);
+    if (!isPasswordCorrect) {
+        return res.status(401).json({ message: "Invalid password" });
+    }
+
+    const accessToken = generateToken(user);
+    const refreshToken = await createRefreshToken(user.id);
+
+    return res.status(200).json({
+        message: "Login successful",
+        data: {
+            id: user.id,
+            username: user.username,
+            phone: user.phone,
+            role: user.role
+        },
+        token: accessToken, // backward compatibility for existing client code
+        accessToken,
+        refreshToken
+    });
+};
+```
+3. Add the `refresh` and `logout` controllers:
+```javascript
+const refresh = async (req, res) => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return res.status(400).json({ message: "Refresh token is required" });
+    }
+
+    const user = await verifyRefreshToken(refreshToken);
+    if (!user) {
+        return res.status(401).json({ message: "Invalid or expired refresh token" });
+    }
+
+    const accessToken = generateToken(user);
+
+    return res.status(200).json({
+        message: "Token refreshed successfully",
+        accessToken,
+        token: accessToken
+    });
+};
+
+const logout = async (req, res) => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return res.status(400).json({ message: "Refresh token is required" });
+    }
+
+    await revokeRefreshToken(refreshToken);
+
+    return res.status(200).json({
+        message: "Logged out successfully"
+    });
+};
+
+// Export all routes
+module.exports = { register, login, refresh, logout };
+```
+
+---
+
+### Step 7 — Mount Routes inside `auth.routes.js`
+
+#### 🛠️ Action
+Open `src/modules/auth/auth.routes.js`, import the new methods, and register the POST routes:
+```javascript
+const { register, login, refresh, logout } = require('./auth.controller');
+
+router.post("/register", register);
+router.post("/login", login);
+router.post("/refresh", refresh);
+router.post("/logout", logout);
+```
+
 ---
 
 ## 13. ✅ Completion Checklist
@@ -864,7 +1155,8 @@ You have "completed" authentication when **all** of these are true:
 - [ ] A role-guarded route rejects the wrong role (`403`)
 - [ ] Secrets (`JWT_SECRET`, DB password) live in `.env`, not in code
 - [ ] Consistent `{ message, data }` response shape everywhere
-- [ ] Tested end-to-end in Postman
+- [ ] Refresh Token mechanism implemented (`POST /auth/refresh` and `POST /auth/logout`)
+- [ ] Tested end-to-end in Postman / Integration Tests
 
 ---
 
