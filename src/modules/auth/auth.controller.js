@@ -60,8 +60,8 @@ const login = async (req, res) => {
     }
 
     // wrong password returns 401
-    const isPasswordCorrect = checkPassword(user, password);
-    if (!isPasswordCorrect) {
+    const isPasswordCorrect = await checkPassword(user, password);
+    if (!isPasswordCorrect) { // true/false, 
         return res.status(401).json({ message: "Invalid password" });
     }
 
