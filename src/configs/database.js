@@ -4,6 +4,7 @@ require("dotenv").config();
 
 const { User } = require("../modules/users/user.entity");
 const { Course } = require("../modules/courses/course.entity");
+const { RefreshToken } = require("../modules/auth/refresh-token.entity");
 
 // Single DataSource for the whole app.
 // synchronize: true auto-creates/updates tables from entities (dev only).
@@ -17,7 +18,7 @@ const AppDataSource = new DataSource({
     
     synchronize: true, // true auto-creates/updates tables from entities (dev only)
     // logging: false,
-    entities: [User, Course],
+    entities: [User, Course, RefreshToken], // add all entities here
 });
 
 module.exports = { AppDataSource };
