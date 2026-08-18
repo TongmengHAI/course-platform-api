@@ -31,28 +31,28 @@ Currently, the server restricts the entire `/courses` mount path to instructors 
 
 ## Step 1 — Refactoring Route Mounting in `server.js`
 
-Open `server.js` and remove the global `authorize("instructor", "admin")` check from the `/courses` path mounting. This moves authorization from a global level to individual routes inside `courses.routes.js`.
+Open `server.js` and remove the global `auth` and `authorize` check from the `/courses` path mounting. This allows guest users to read the catalog and detail pages, moving authorization to individual routes inside `courses.routes.js`.
 
 `server.js`
 ```javascript
 // Before:
 app.use("/courses", auth, authorize("instructor", "admin"), courseRoutes);
 
-// After: (Move role checks into the router itself, only keeping token validation globally)
-app.use("/courses", auth, courseRoutes);
+// After: (Decouple auth globally so read-only routes are open to guests)
+app.use("/courses", courseRoutes);
 ```
 
 ---
 
 ## Step 2 — Splitting Permissions in `courses.routes.js`
 
-Open `src/modules/courses/courses.routes.js`. Import the `authorize` helper and apply it explicitly to writing operations while leaving read-only operations open to any authenticated user.
+Open `src/modules/courses/courses.routes.js`. Import both `auth` and `authorize` helpers, and apply them explicitly to writing operations, while leaving read-only operations open.
 
 `src/modules/courses/courses.routes.js`
 ```javascript
 const express = require("express");
 const router = express.Router();
-const { authorize } = require("../../middlewares/auth");
+const { auth, authorize } = require("../../middlewares/auth"); // ⬅️ Import auth and authorize
 
 // Import the controllers
 const {
@@ -64,15 +64,15 @@ const {
     softDeleteCourse
 } = require("./courses.controller");
 
-// Read endpoints - open to all authenticated users (students, instructors, admins)
+// Read endpoints - open to the public (no token required)
 router.get("", getAllCourses);          // GET    /courses
 router.get("/:id", getCourseById);      // GET    /courses/:id
 
-// Write/Mutation endpoints - strictly restricted to instructors and admins
-router.post("", authorize("instructor", "admin"), createCourse);          // POST   /courses
-router.put("/:id", authorize("instructor", "admin"), updateCourse);       // PUT    /courses/:id
-router.delete("/:id", authorize("instructor", "admin"), deleteCourse);    // DELETE /courses/:id
-router.patch("/:id", authorize("instructor", "admin"), softDeleteCourse); // PATCH  /courses/:id
+// Write/Mutation endpoints - strictly restricted to authenticated instructors and admins
+router.post("", auth, authorize("instructor", "admin"), createCourse);          // POST   /courses
+router.put("/:id", auth, authorize("instructor", "admin"), updateCourse);       // PUT    /courses/:id
+router.delete("/:id", auth, authorize("instructor", "admin"), deleteCourse);    // DELETE /courses/:id
+router.patch("/:id", auth, authorize("instructor", "admin"), softDeleteCourse); // PATCH  /courses/:id
 
 module.exports = router;
 ```
@@ -118,8 +118,8 @@ Use Postman to confirm that student roles cannot create or edit courses, but can
 
 | Symptom | Cause | Remedy |
 |---|---|---|
-| `401 Unauthorized` | Missing token in Request headers. | Add `Authorization: Bearer <token>` in Postman request settings. |
-| `403 Forbidden` on `GET /courses` | Global `authorize` middleware was not removed in `server.js`. | Check `server.js` and verify `/courses` has only `auth` middleware. |
+| `401 Unauthorized` on write operations | Missing token in Request headers. | Add `Authorization: Bearer <token>` in Postman request settings. |
+| `401 Unauthorized` on `GET /courses` | Global `auth` middleware was not removed in `server.js`. | Check `server.js` and verify `/courses` is mounted as `app.use("/courses", courseRoutes)` without middleware. |
 
 ---
 
