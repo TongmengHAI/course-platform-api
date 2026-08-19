@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { auth, authorize } = require("../../middlewares/auth");
+const { auth, authorize } = require("../../middlewares/auth"); // ⬅️ Import auth and authorize
 
 // Import the controllers
 const {
@@ -12,17 +12,14 @@ const {
     softDeleteCourse
 } = require("./courses.controller");
 
-// CRUD = Create, Read, Update, Delete
+// Read endpoints - open to the public (no token required)
+router.get("", getAllCourses);          // GET    /courses
+router.get("/:id", getCourseById);      // GET    /courses/:id
 
-// Map endpoints to controller functions
-router.get("", getAllCourses);          // GET    http://127.0.0.1:5000/courses/
-router.post("",  authorize("instructor", "admin"), createCourse);          // POST   http://127.0.0.1:5000/courses/
-
-router.get("/:id", getCourseById);      // GET    http://127.0.0.1:5000/courses/1
-
-router.put("/:id",  authorize("instructor", "admin"), updateCourse);       // PUT    http://127.0.0.1:5000/courses/1
-
-router.delete("/:id",  authorize("instructor", "admin"), deleteCourse);    // DELETE http://127.0.0.1:5000/courses/1
-router.patch("/:id",  authorize("instructor", "admin"), softDeleteCourse); // PATCH http://127.0.0.1:5000/courses/1
+// Write/Mutation endpoints - strictly restricted to authenticated instructors and admins
+router.post("", auth, authorize("instructor", "admin"), createCourse);          // POST   /courses
+router.put("/:id", auth, authorize("instructor", "admin"), updateCourse);       // PUT    /courses/:id
+router.delete("/:id", auth, authorize("instructor", "admin"), deleteCourse);    // DELETE /courses/:id
+router.patch("/:id", auth, authorize("instructor", "admin"), softDeleteCourse); // PATCH  /courses/:id
 
 module.exports = router;
