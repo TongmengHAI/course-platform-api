@@ -21,11 +21,19 @@ A step-by-step guide for adjusting the Course Access Control, protecting mutatin
 
 ## 1. Understanding Course Access Rules
 
-In the MVP release:
-- **Students** need to view courses (`GET /courses` and `GET /courses/:id`).
-- **Instructors** and **Admins** manage the courses (`POST /courses`, `PUT /courses/:id`, `DELETE /courses/:id`, `PATCH /courses/:id`).
+Here is a breakdown of what each user role is permitted to perform in the course management backend:
 
-Currently, the server restricts the entire `/courses` mount path to instructors and admins. We need to refactor the security rules so that only mutating routes require authorization, while read-only routes are open to all authenticated users.
+| Role | Browse Catalog (`GET /courses`) | View Detail (`GET /courses/:id`) | Create Course (`POST /courses`) | Edit Course (`PUT /courses/:id`) |
+|---|:---:|:---:|:---:|:---:|
+| **Guest (Unauthenticated)** | ✅ | ✅ | ❌ | ❌ |
+| **Student** | ✅ | ✅ | ❌ | ❌ |
+| **Instructor** | ✅ | ✅ | ✅ (Own) | ✅ (Own) |
+| **Admin** | ✅ | ✅ | ✅ (All) | ✅ (All) |
+
+> [!NOTE]
+> Instructors are authorized to create and manage their own courses on the database level, while Admins have permission to manage all courses globally.
+
+Currently, the server restricts the entire `/courses` mount path to instructors and admins. We need to refactor the security rules so that only mutating routes require authorization (such as POST, PUT, DELETE), while read-only routes (GET) are open to everyone without token requirements.
 
 ---
 
