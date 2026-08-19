@@ -13,9 +13,10 @@ A step-by-step guide for adjusting the Course Access Control, protecting mutatin
 1. [Understanding Course Access Rules](#1-understanding-course-access-rules)
 2. [Step 1 — Refactoring Route Mounting in `server.js`](#step-1--refactoring-route-mounting-in-serverjs)
 3. [Step 2 — Splitting Permissions in `courses.routes.js`](#step-2---splitting-permissions-in-coursesroutesjs)
-4. [Testing Course Endpoints](#testing-course-endpoints)
-5. [Common Errors & Fixes](#common-errors--fixes)
-6. [Completion Checklist](#completion-checklist)
+4. [Step 3 — Auto-associating Instructor Session in `courses.controller.js`](#step-3--auto-associating-instructor-session-in-coursescontrollerjs)
+5. [Testing Course Endpoints](#testing-course-endpoints)
+6. [Common Errors & Fixes](#common-errors--fixes)
+7. [Completion Checklist](#completion-checklist)
 
 ---
 
@@ -83,6 +84,68 @@ router.delete("/:id", auth, authorize("instructor", "admin"), deleteCourse);    
 router.patch("/:id", auth, authorize("instructor", "admin"), softDeleteCourse); // PATCH  /courses/:id
 
 module.exports = router;
+```
+
+---
+
+## Step 3 — Auto-associating Instructor Session in `courses.controller.js`
+
+To prevent creating or updating courses with a `null` instructor, we should automatically read the logged-in user's ID from the JWT token payload (`req.user.id`) and bind it to the course relation.
+
+`src/modules/courses/courses.controller.js`
+```javascript
+// 1) Inside createCourse:
+const createCourse = async (req, res) => {
+    const { title, description, category, level, price } = req.body;
+    
+    // Read the instructor ID from the authenticated token payload
+    const instructorId = req.user?.id || req.body.instructorId;
+
+    if (!title) {
+        return res.status(400).json({ message: "title is required" });
+    }
+
+    const repo = courseRepository();
+    const course = repo.create({
+        title,
+        description,
+        category,
+        level,
+        price,
+        instructor: instructorId ? { id: Number(instructorId) } : null,
+    });
+    const data = await repo.save(course);
+    res.status(201).json({ message: "Course created successfully", data });
+};
+
+// 2) Inside updateCourse:
+const updateCourse = async (req, res) => {
+    const courseId = Number(req.params.id);
+    const { title, description, category, level, price } = req.body;
+
+    const repo = courseRepository();
+    const course = await repo.findOne({ 
+        where: { id: courseId },
+        relations: { instructor: true }
+    });
+
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    if (title !== undefined) course.title = title;
+    if (description !== undefined) course.description = description;
+    if (category !== undefined) course.category = category;
+    if (level !== undefined) course.level = level;
+    if (price !== undefined) course.price = price;
+
+    // Auto-associate with the current session's authenticated user if missing or updated
+    const finalInstructorId = req.body.instructorId || req.user?.id;
+    if (finalInstructorId) {
+        course.instructor = { id: Number(finalInstructorId) };
+    }
+
+    const data = await repo.save(course);
+    res.json({ message: "Course updated successfully", data });
+};
 ```
 
 ---
