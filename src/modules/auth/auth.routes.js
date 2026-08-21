@@ -3,13 +3,17 @@ const router = express.Router();
 
 const {
     register,
-    login
+    login,
+    refresh,
+    logout
 } = require('./auth.controller');
+const { auth } = require("../../middlewares/auth");
 
 // prefix "/auth" comes from server.js
-// POST http://localhost:5000/auth/register
 router.post("/register", register);
-// POST http://localhost:5000/auth/login
 router.post("/login", login);
+router.post("/refresh", refresh);
+router.post("/logout", auth, logout);
+
 
 module.exports = router;

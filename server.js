@@ -22,7 +22,7 @@ const logger = (req, res, next) => {
 };
 app.use(logger);
 
-app.use("/courses", auth, authorize("instructor", "admin"), courseRoutes);
+app.use("/courses", courseRoutes);
 app.use("/users", auth, authorize("admin"), userRoutes);
 app.use("/auth", authRoutes);
 

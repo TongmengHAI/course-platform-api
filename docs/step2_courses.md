@@ -13,46 +13,55 @@ A step-by-step guide for adjusting the Course Access Control, protecting mutatin
 1. [Understanding Course Access Rules](#1-understanding-course-access-rules)
 2. [Step 1 — Refactoring Route Mounting in `server.js`](#step-1--refactoring-route-mounting-in-serverjs)
 3. [Step 2 — Splitting Permissions in `courses.routes.js`](#step-2---splitting-permissions-in-coursesroutesjs)
-4. [Testing Course Endpoints](#testing-course-endpoints)
-5. [Common Errors & Fixes](#common-errors--fixes)
-6. [Completion Checklist](#completion-checklist)
+4. [Step 3 — Auto-associating Instructor Session in `courses.controller.js`](#step-3--auto-associating-instructor-session-in-coursescontrollerjs)
+5. [Testing Course Endpoints](#testing-course-endpoints)
+6. [Common Errors & Fixes](#common-errors--fixes)
+7. [Completion Checklist](#completion-checklist)
 
 ---
 
 ## 1. Understanding Course Access Rules
 
-In the MVP release:
-- **Students** need to view courses (`GET /courses` and `GET /courses/:id`).
-- **Instructors** and **Admins** manage the courses (`POST /courses`, `PUT /courses/:id`, `DELETE /courses/:id`, `PATCH /courses/:id`).
+Here is a breakdown of what each user role is permitted to perform in the course management backend:
 
-Currently, the server restricts the entire `/courses` mount path to instructors and admins. We need to refactor the security rules so that only mutating routes require authorization, while read-only routes are open to all authenticated users.
+| Role | Browse Catalog (`GET /courses`) | View Detail (`GET /courses/:id`) | Create Course (`POST /courses`) | Edit Course (`PUT /courses/:id`) |
+|---|:---:|:---:|:---:|:---:|
+| **Guest (Unauthenticated)** | ✅ | ✅ | ❌ | ❌ |
+| **Student** | ✅ | ✅ | ❌ | ❌ |
+| **Instructor** | ✅ | ✅ | ✅ (Own) | ✅ (Own) |
+| **Admin** | ✅ | ✅ | ✅ (All) | ✅ (All) |
+
+> [!NOTE]
+> Instructors are authorized to create and manage their own courses on the database level, while Admins have permission to manage all courses globally.
+
+Currently, the server restricts the entire `/courses` mount path to instructors and admins. We need to refactor the security rules so that only mutating routes require authorization (such as POST, PUT, DELETE), while read-only routes (GET) are open to everyone without token requirements.
 
 ---
 
 ## Step 1 — Refactoring Route Mounting in `server.js`
 
-Open `server.js` and remove the global `authorize("instructor", "admin")` check from the `/courses` path mounting. This moves authorization from a global level to individual routes inside `courses.routes.js`.
+Open `server.js` and remove the global `auth` and `authorize` check from the `/courses` path mounting. This allows guest users to read the catalog and detail pages, moving authorization to individual routes inside `courses.routes.js`.
 
 `server.js`
 ```javascript
 // Before:
 app.use("/courses", auth, authorize("instructor", "admin"), courseRoutes);
 
-// After: (Move role checks into the router itself, only keeping token validation globally)
-app.use("/courses", auth, courseRoutes);
+// After: (Decouple auth globally so read-only routes are open to guests)
+app.use("/courses", courseRoutes);
 ```
 
 ---
 
 ## Step 2 — Splitting Permissions in `courses.routes.js`
 
-Open `src/modules/courses/courses.routes.js`. Import the `authorize` helper and apply it explicitly to writing operations while leaving read-only operations open to any authenticated user.
+Open `src/modules/courses/courses.routes.js`. Import both `auth` and `authorize` helpers, and apply them explicitly to writing operations, while leaving read-only operations open.
 
 `src/modules/courses/courses.routes.js`
 ```javascript
 const express = require("express");
 const router = express.Router();
-const { authorize } = require("../../middlewares/auth");
+const { auth, authorize } = require("../../middlewares/auth"); // ⬅️ Import auth and authorize
 
 // Import the controllers
 const {
@@ -64,17 +73,79 @@ const {
     softDeleteCourse
 } = require("./courses.controller");
 
-// Read endpoints - open to all authenticated users (students, instructors, admins)
+// Read endpoints - open to the public (no token required)
 router.get("", getAllCourses);          // GET    /courses
 router.get("/:id", getCourseById);      // GET    /courses/:id
 
-// Write/Mutation endpoints - strictly restricted to instructors and admins
-router.post("", authorize("instructor", "admin"), createCourse);          // POST   /courses
-router.put("/:id", authorize("instructor", "admin"), updateCourse);       // PUT    /courses/:id
-router.delete("/:id", authorize("instructor", "admin"), deleteCourse);    // DELETE /courses/:id
-router.patch("/:id", authorize("instructor", "admin"), softDeleteCourse); // PATCH  /courses/:id
+// Write/Mutation endpoints - strictly restricted to authenticated instructors and admins
+router.post("", auth, authorize("instructor", "admin"), createCourse);          // POST   /courses
+router.put("/:id", auth, authorize("instructor", "admin"), updateCourse);       // PUT    /courses/:id
+router.delete("/:id", auth, authorize("instructor", "admin"), deleteCourse);    // DELETE /courses/:id
+router.patch("/:id", auth, authorize("instructor", "admin"), softDeleteCourse); // PATCH  /courses/:id
 
 module.exports = router;
+```
+
+---
+
+## Step 3 — Auto-associating Instructor Session in `courses.controller.js`
+
+To prevent creating or updating courses with a `null` instructor, we should automatically read the logged-in user's ID from the JWT token payload (`req.user.id`) and bind it to the course relation.
+
+`src/modules/courses/courses.controller.js`
+```javascript
+// 1) Inside createCourse:
+const createCourse = async (req, res) => {
+    const { title, description, category, level, price } = req.body;
+    
+    // Read the instructor ID from the authenticated token payload
+    const instructorId = req.user?.id || req.body.instructorId;
+
+    if (!title) {
+        return res.status(400).json({ message: "title is required" });
+    }
+
+    const repo = courseRepository();
+    const course = repo.create({
+        title,
+        description,
+        category,
+        level,
+        price,
+        instructor: instructorId ? { id: Number(instructorId) } : null,
+    });
+    const data = await repo.save(course);
+    res.status(201).json({ message: "Course created successfully", data });
+};
+
+// 2) Inside updateCourse:
+const updateCourse = async (req, res) => {
+    const courseId = Number(req.params.id);
+    const { title, description, category, level, price } = req.body;
+
+    const repo = courseRepository();
+    const course = await repo.findOne({ 
+        where: { id: courseId },
+        relations: { instructor: true }
+    });
+
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    if (title !== undefined) course.title = title;
+    if (description !== undefined) course.description = description;
+    if (category !== undefined) course.category = category;
+    if (level !== undefined) course.level = level;
+    if (price !== undefined) course.price = price;
+
+    // Auto-associate with the current session's authenticated user if missing or updated
+    const finalInstructorId = req.body.instructorId || req.user?.id;
+    if (finalInstructorId) {
+        course.instructor = { id: Number(finalInstructorId) };
+    }
+
+    const data = await repo.save(course);
+    res.json({ message: "Course updated successfully", data });
+};
 ```
 
 ---
@@ -118,8 +189,8 @@ Use Postman to confirm that student roles cannot create or edit courses, but can
 
 | Symptom | Cause | Remedy |
 |---|---|---|
-| `401 Unauthorized` | Missing token in Request headers. | Add `Authorization: Bearer <token>` in Postman request settings. |
-| `403 Forbidden` on `GET /courses` | Global `authorize` middleware was not removed in `server.js`. | Check `server.js` and verify `/courses` has only `auth` middleware. |
+| `401 Unauthorized` on write operations | Missing token in Request headers. | Add `Authorization: Bearer <token>` in Postman request settings. |
+| `401 Unauthorized` on `GET /courses` | Global `auth` middleware was not removed in `server.js`. | Check `server.js` and verify `/courses` is mounted as `app.use("/courses", courseRoutes)` without middleware. |
 
 ---
 

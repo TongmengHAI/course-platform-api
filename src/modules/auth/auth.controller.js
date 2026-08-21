@@ -1,6 +1,6 @@
 const { creating, generateToken } = require('../users/user.service');
 const { findUserByPhone, findUserByEmail } = require('../users/user.service');
-const { checkPassword } = require('./auth.service')
+const { checkPassword, createRefreshToken, verifyRefreshToken, revokeRefreshToken } = require('./auth.service')
 
 // controller = request & response layer
 
@@ -60,10 +60,12 @@ const login = async (req, res) => {
     }
 
     // wrong password returns 401
-    const isPasswordCorrect = checkPassword(user, password);
-    if (!isPasswordCorrect) {
+    const isPasswordCorrect = await checkPassword(user, password);
+    if (!isPasswordCorrect) { // true/false, 
         return res.status(401).json({ message: "Invalid password" });
     }
+
+    const refreshToken = await createRefreshToken(user.id);
 
     // correct login returns safe user info (no password) and token
     return res.status(200).json({
@@ -74,8 +76,43 @@ const login = async (req, res) => {
             phone: user.phone,
             role: user.role
         },
-        token: generateToken(user)
+        token: generateToken(user),
+        refreshToken: refreshToken
     });
 };
 
-module.exports = { register, login };
+const refresh = async (req, res) => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return res.status(400).json({ message: "Refresh token is required" });
+    }
+
+    const user = await verifyRefreshToken(refreshToken);
+    if (!user) {
+        return res.status(401).json({ message: "Invalid or expired refresh token" });
+    }
+
+    const accessToken = generateToken(user);
+
+    return res.status(200).json({
+        message: "Token refreshed successfully",
+        token: accessToken
+    });
+};
+
+const logout = async (req, res) => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return res.status(400).json({ message: "Refresh token is required" });
+    }
+
+    await revokeRefreshToken(refreshToken);
+
+    return res.status(200).json({
+        message: "Logged out successfully"
+    });
+};
+
+module.exports = { register, login, refresh, logout };
