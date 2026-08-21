@@ -23,7 +23,7 @@ const getAllCourses = async (req, res) => {
     const sortBy = allowedSortFields.includes(req.query.sortBy)
         ? req.query.sortBy
         : "id";
-    const order = String(req.query.order).toUpperCase() === "ASC" ? "ASC" : "DESC"; 
+    const order = String(req.query.order).toUpperCase() === "ASC" ? "ASC" : "DESC";
     // asc = ascending order, desc = descending order
 
     // ---- Build the query ----
@@ -78,11 +78,14 @@ const getCourseById = async (req, res) => {
 // @desc Create a new course
 // @route POST /
 const createCourse = async (req, res) => {
-    const { title, description, category, level, price, instructorId } = req.body;
+    const { title, description, category, level, price } = req.body;
 
     if (!title) {
         return res.status(400).json({ message: "title is required" });
     }
+
+    // Read the instructor ID from the authenticated token payload
+    const instructorId = req.user?.id || req.body.instructorId;
 
     const repo = courseRepository();
     const course = repo.create({
@@ -102,23 +105,29 @@ const createCourse = async (req, res) => {
 // @route PUT /:id
 const updateCourse = async (req, res) => {
     const courseId = Number(req.params.id);
-    const { title, description, category, level, price, instructorId } = req.body;
+    const { title, description, category, level, price } = req.body;
 
     const repo = courseRepository();
-    const course = await repo.findOneBy({ id: courseId });
+    const course = await repo.findOne({
+        where: { id: courseId },
+        relations: { instructor: true }
+    });
 
     if (!course) return res.status(404).json({ message: "Course not found" });
 
-    // Only overwrite fields that were actually provided.
     if (title !== undefined) course.title = title;
     if (description !== undefined) course.description = description;
     if (category !== undefined) course.category = category;
     if (level !== undefined) course.level = level;
     if (price !== undefined) course.price = price;
-    if (instructorId !== undefined) course.instructor = instructorId ? { id: instructorId } : null;
+
+    // Auto-associate with the current session's authenticated user if missing or updated
+    const finalInstructorId = req.body.instructorId || req.user?.id;
+    if (finalInstructorId) {
+        course.instructor = { id: Number(finalInstructorId) };
+    }
 
     const data = await repo.save(course);
-
     res.json({ message: "Course updated successfully", data });
 };
 
